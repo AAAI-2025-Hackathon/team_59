@@ -280,6 +280,7 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import json
+import time  # Import the time module
 
 # Hardcoded Gemini API Key
 GEMINI_API_KEY = "AIzaSyCC430r2ShgtyH_V0Dqop9eW9DWdtVtH3Y"  # Replace with your actual API key
@@ -394,7 +395,7 @@ def data_ingestion():
                   (uploaded_file.name, file_path, os.path.getsize(file_path)))
         conn.commit()
         st.success("File uploaded and processed successfully!")
-    
+
     # Manual notes
     st.subheader("Create Manual Notes")
     note_text = st.text_area("Enter your notes here:")
@@ -404,7 +405,80 @@ def data_ingestion():
             pdf_path = save_note_as_pdf(note_text, f"{note_filename}.pdf")
             if pdf_path:
                 st.success(f"Note saved as {pdf_path}")
+def generate_filename(note_text):
+    """Generate a filename using Gemini"""
+    prompt = f"Given the content of the note between <file> and </file> describe it in at max 4 words without any special characters. DO NOT give anything extra <file> '{note_text}' </file>"
+    
+    try:
+        response = generate_with_gemini(prompt)
+        if response:
+            # Clean up the filename (remove extra quotes or spaces)
+            filename = re.sub(r'["\s]+', '', response)  # Removes quotes and spaces
+            return filename
+        else:
+            return "note.pdf"  # Default filename if Gemini fails
+    except Exception as e:
+        st.error(f"Error generating filename: {e}")
+        return "note.pdf"  # Default filename on error
+def get_uploaded_files():
+    """Fetch and return the list of files from the SQLite database."""
+    try:
+        c = conn.cursor()
+        c.execute("SELECT name, size FROM files")
+        files = c.fetchall()
+        
+        if not files:
+            return []
+        
+        return [
+            {
+                "File Name": file[0],
+                "Size (KB)": round(file[1] / 1024, 2),  # Convert bytes to KB
+            }
+            for file in files
+        ]
+    except Exception as e:
+        st.error(f"Error fetching document list: {e}")
+        return []
+def delete_file(file_name):
+    """Delete a file from the SQLite database and local storage."""
+    try:
+        # Get the file path from the database
+        c = conn.cursor()
+        c.execute("SELECT path FROM files WHERE name = ?", (file_name,))
+        file_path = c.fetchone()
+        
+        if file_path:
+            # Delete the file from local storage
+            os.remove(file_path[0])
+            
+            # Delete the file record from the database
+            c.execute("DELETE FROM files WHERE name = ?", (file_name,))
+            conn.commit()
+            
+            st.success(f"File '{file_name}' has been deleted successfully!")
+        else:
+            st.error(f"File '{file_name}' not found.")
+    except Exception as e:
+        st.error(f"Error deleting file '{file_name}': {e}")
+def uploaded_files():
+    """Display the uploaded files with an option to delete them."""
+    file_data = get_uploaded_files()
 
+    if not file_data:
+        st.info("No files have been uploaded yet.")
+        return
+
+    st.subheader("Uploaded Files")
+    
+    for file in file_data:
+        col1, col2, col3 = st.columns([3, 1, 1])
+        
+        col1.text(f"📄 {file['File Name']}")
+        col2.text(f"{file['Size (KB)']} KB")
+        
+        if col3.button("Delete", key=file['File Name']):
+            delete_file(file['File Name'])
 def summarizer():
     """Document summarization"""
     st.subheader("Document Summarization")
@@ -586,10 +660,36 @@ def take_notes():
     
     except Exception as e:
         st.error(f"An error occurred: {e}")
+
+def init_chat_session():
+    """Initialize chat session state."""
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    if "selected_doc" not in st.session_state:
+        st.session_state.selected_doc = None
+    if "use_chat_history" not in st.session_state:
+        st.session_state.use_chat_history = True
+
+def clear_chat_history():
+    """Clear the chat history."""
+    st.session_state.chat_history = []
+    st.rerun()
+
+def get_chat_history():
+    """Retrieve recent messages from the chat history."""
+    chat_history = []
+    for message in st.session_state.chat_history:
+        chat_history.append(f"{message['role']}: {message['content']}")
+    return "\n".join(chat_history)
+
 def document_query():
-    """Document Q&A"""
+    """Document Q&A with chat history and document selection."""
     st.subheader("Document Query")
     
+    # Initialize chat session
+    init_chat_session()
+    
+    # Fetch the list of documents from the database
     c = conn.cursor()
     c.execute("SELECT name, path FROM files")
     documents = c.fetchall()
@@ -598,36 +698,96 @@ def document_query():
         st.warning("No documents found!")
         return
     
-    selected_doc = st.selectbox("Select document", [doc[0] for doc in documents])
-    question = st.text_input("Enter your question")
+    # Document selection
+    if st.session_state.selected_doc is None:
+        st.session_state.selected_doc = st.selectbox("Select a file to chat with", [doc[0] for doc in documents])
+        st.info(f"Selected document: {st.session_state.selected_doc}")
     
-    if question and st.button("Get Answer"):
-        doc_path = [doc[1] for doc in documents if doc[0] == selected_doc][0]
+    # Sidebar options
+    with st.sidebar:
+        st.subheader("Chat Settings")
+        st.session_state.use_chat_history = st.checkbox("Enable Chat History", value=st.session_state.use_chat_history)
+        if st.button("Clear Chat History"):
+            clear_chat_history()
+    
+    # Display chat history
+    st.subheader("Chat")
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+    
+    # User input
+    user_input = st.chat_input("Enter your question")
+    
+    if user_input:
+        # Add user message to chat history
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        
+        # Display the user's question
+        with st.chat_message("user"):
+            st.write(f"**Question:** {user_input}")
+        
+        # Get the path of the selected document
+        doc_path = [doc[1] for doc in documents if doc[0] == st.session_state.selected_doc][0]
+        
+        # Extract text from the document
         text, index, chunks = process_document(doc_path)
         
-        # Find relevant chunks
-        query_embedding = embedding_model.encode([question])
+        # Find relevant chunks using FAISS
+        query_embedding = embedding_model.encode([user_input])
         _, indices = index.search(np.array(query_embedding).astype('float32'), k=3)
         
+        # Combine relevant chunks into context
         context = " ".join([chunks[i] for i in indices[0]])
         
-        prompt = f"""
-        Answer this question based on the provided context.
-        Question: {question}
-        Context: {context}
-        If the answer isn't in the context, say you don't know.
-        Provide a concise answer in 2-3 sentences.
-        """
+        # Generate prompt with chat history (if enabled)
+        if st.session_state.use_chat_history:
+            chat_history = "\n".join(
+                [f"{message['role']}: {message['content']}" for message in st.session_state.chat_history]
+            )
+            prompt = f"""
+            You are a helpful assistant. Answer the user's question based on the provided context and chat history.
+            Chat History:
+            {chat_history}
+            
+            Context:
+            {context}
+            
+            Question: {user_input}
+            If the answer isn't in the context, say you don't know.
+            Provide a concise and accurate answer in 2-3 sentences.
+            """
+        else:
+            prompt = f"""
+            You are a helpful assistant. Answer the user's question based on the provided context.
+            Context:
+            {context}
+            
+            Question: {user_input}
+            If the answer isn't in the context, say you don't know.
+            Provide a concise and accurate answer in 2-3 sentences.
+            """
         
+        # Get AI response using Gemini
         answer = generate_with_gemini(prompt)
+        
         if answer:
-            st.write("### Answer")
-            st.write(answer)
-
+            # Add AI response to chat history
+            st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            
+            # Display AI response in a streaming fashion
+            with st.chat_message("assistant"):
+                response_container = st.empty()
+                full_response = ""
+                for chunk in answer.split():
+                    full_response += chunk + " "
+                    response_container.markdown(f"**Answer:** {full_response}▌")
+                    time.sleep(0.1)  # Simulate streaming
+                response_container.markdown(f"**Answer:** {full_response}")
 def main():
     st.title("Study Assistant - Gemini Edition")
     
-    menu = ["Data Ingestion", "Summarizer", "Quiz Generator", "Document Query", "Notes"]
+    menu = ["Data Ingestion", "Summarizer", "Quiz Generator", "Document Query", "Notes", "Uploaded Files"]
     choice = st.sidebar.selectbox("Menu", menu)
     
     if choice == "Data Ingestion":
@@ -637,8 +797,11 @@ def main():
     elif choice == "Quiz Generator":
         quiz_generator()
     elif choice == "Document Query":
-        document_query()
+        document_query()  # Includes chat history
     elif choice == "Notes":
-        take_notes()  # Add this line
+        take_notes()
+    elif choice == "Uploaded Files":
+        uploaded_files()
+
 if __name__ == "__main__":
     main()
