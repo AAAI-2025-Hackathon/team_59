@@ -1,4 +1,4 @@
-# Hackathon Theme
+# AI for Social Good
 ## EduMate – Your Smartest Study Companion! 🚀📚
 
 ## Inspiration
