@@ -1,5 +1,5 @@
 # Hackathon Theme
-# EduMate – Your Smartest Study Companion! 🚀📚
+## EduMate – Your Smartest Study Companion! 🚀📚
 
 ## Inspiration
 In today's fast-paced academic environment, students often struggle to manage their study materials, extract key insights, and prepare effectively for exams. Traditional methods of studying can be time-consuming and inefficient. EduMate was born out of the need to create a smarter, more efficient way to study. By leveraging cutting-edge AI technologies, EduMate aims to revolutionize the way students interact with their study materials, making learning more engaging, personalized, and effective.
