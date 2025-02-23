@@ -1,289 +1,27 @@
-# import streamlit as st
-# import os
-# import sqlite3
-# import google.generativeai as genai
-# from reportlab.pdfgen import canvas
-# from reportlab.lib.pagesizes import letter
-# from PyPDF2 import PdfReader
-# from langchain.text_splitter import RecursiveCharacterTextSplitter
-# import faiss
-# import numpy as np
-# from sentence_transformers import SentenceTransformer
-# import json
-
-# # Hardcoded Gemini API Key
-# GEMINI_API_KEY = "AIzaSyCC430r2ShgtyH_V0Dqop9eW9DWdtVtH3Y"  # Replace with your actual API key
-
-# # Configure Gemini
-# genai.configure(api_key=GEMINI_API_KEY)
-# generation_config = {
-#     "temperature": 0.7,
-#     "top_p": 0.95,
-#     "top_k": 40,
-#     "max_output_tokens": 8192,
-# }
-
-# model = genai.GenerativeModel(
-#     model_name="gemini-2.0-flash-exp",
-#     generation_config=generation_config,
-# )
-
-# # Initialize database
-# conn = sqlite3.connect('study_assistant.db')
-# c = conn.cursor()
-# c.execute('''CREATE TABLE IF NOT EXISTS files
-#              (id INTEGER PRIMARY KEY, name TEXT, path TEXT, size INTEGER)''')
-# c.execute('''CREATE TABLE IF NOT EXISTS notes
-#              (id INTEGER PRIMARY KEY, content TEXT, path TEXT)''')
-# conn.commit()
-
-# # Initialize Sentence Transformer
-# embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-
-# def process_document(file_path):
-#     """Extract text from PDF and create embeddings"""
-#     text = ""
-#     if file_path.endswith('.pdf'):
-#         reader = PdfReader(file_path)
-#         for page in reader.pages:
-#             text += page.extract_text()
-    
-#     # Split text into chunks
-#     text_splitter = RecursiveCharacterTextSplitter(
-#         chunk_size=1000,
-#         chunk_overlap=200
-#     )
-#     chunks = text_splitter.split_text(text)
-    
-#     # Create embeddings
-#     embeddings = embedding_model.encode(chunks)
-    
-#     # Create FAISS index
-#     dimension = embeddings.shape[1]
-#     index = faiss.IndexFlatL2(dimension)
-#     index.add(np.array(embeddings).astype('float32'))
-    
-#     return text, index, chunks
-
-# def generate_with_gemini(prompt):
-#     """Generate text using Gemini"""
-#     try:
-#         response = model.generate_content(prompt)
-#         return response.text
-#     except Exception as e:
-#         st.error(f"Gemini error: {e}")
-#         return None
-
-# def save_note_as_pdf(note_text, filename):
-#     """Save note as PDF"""
-#     try:
-#         pdf_path = os.path.join("notes", filename)
-#         os.makedirs("notes", exist_ok=True)
-        
-#         c = canvas.Canvas(pdf_path, pagesize=letter)
-#         width, height = letter
-        
-#         text = c.beginText(40, height - 40)
-#         text.setFont("Helvetica", 12)
-#         for line in note_text.split('\n'):
-#             text.textLine(line)
-#         c.drawText(text)
-#         c.save()
-        
-#         # Save to database
-#         c = conn.cursor()
-#         c.execute("INSERT INTO notes (content, path) VALUES (?, ?)",
-#                   (note_text, pdf_path))
-#         conn.commit()
-        
-#         return pdf_path
-#     except Exception as e:
-#         st.error(f"PDF creation error: {e}")
-#         return None
-
-# def data_ingestion():
-#     """File upload and note taking functionality"""
-#     st.subheader("Upload Study Materials")
-    
-#     # File upload
-#     uploaded_file = st.file_uploader("Choose a file", type=["pdf", "txt"])
-#     if uploaded_file:
-#         upload_dir = "uploads"
-#         os.makedirs(upload_dir, exist_ok=True)
-#         file_path = os.path.join(upload_dir, uploaded_file.name)
-        
-#         with open(file_path, "wb") as f:
-#             f.write(uploaded_file.getbuffer())
-            
-#         # Process document
-#         text, _, _ = process_document(file_path)
-        
-#         # Store in database
-#         c = conn.cursor()
-#         c.execute("INSERT INTO files (name, path, size) VALUES (?, ?, ?)",
-#                   (uploaded_file.name, file_path, os.path.getsize(file_path)))
-#         conn.commit()
-#         st.success("File uploaded and processed successfully!")
-    
-#     # Manual notes
-#     st.subheader("Create Manual Notes")
-#     note_text = st.text_area("Enter your notes here:")
-#     note_filename = st.text_input("Note filename:")
-#     if st.button("Save Note"):
-#         if note_text and note_filename:
-#             pdf_path = save_note_as_pdf(note_text, f"{note_filename}.pdf")
-#             if pdf_path:
-#                 st.success(f"Note saved as {pdf_path}")
-
-# def summarizer():
-#     """Document summarization"""
-#     st.subheader("Document Summarization")
-    
-#     # Get list of documents
-#     c = conn.cursor()
-#     c.execute("SELECT name, path FROM files")
-#     documents = c.fetchall()
-    
-#     if not documents:
-#         st.warning("No documents found!")
-#         return
-    
-#     selected_doc = st.selectbox("Select document", [doc[0] for doc in documents])
-#     word_limit = st.slider("Summary length (words)", 50, 500, 200)
-    
-#     if st.button("Generate Summary"):
-#         doc_path = [doc[1] for doc in documents if doc[0] == selected_doc][0]
-#         text, _, _ = process_document(doc_path)
-        
-#         prompt = f"""
-#         Create a concise summary of the following document in about {word_limit} words.
-#         Focus on key points and main ideas. Use clear, simple language.
-        
-#         Document content:
-#         {text[:5000]}  # Limiting input size for demo
-#         """
-        
-#         summary = generate_with_gemini(prompt)
-#         if summary:
-#             st.subheader("Summary")
-#             st.write(summary)
-
-# def quiz_generator():
-#     """Quiz generation"""
-#     st.subheader("Quiz Generator")
-    
-#     c = conn.cursor()
-#     c.execute("SELECT name, path FROM files")
-#     documents = c.fetchall()
-    
-#     if not documents:
-#         st.warning("No documents found!")
-#         return
-    
-#     selected_doc = st.selectbox("Select document", [doc[0] for doc in documents])
-#     difficulty = st.selectbox("Difficulty level", ["Easy", "Medium", "Hard"])
-    
-#     if st.button("Generate Quiz"):
-#         doc_path = [doc[1] for doc in documents if doc[0] == selected_doc][0]
-#         text, _, _ = process_document(doc_path)
-        
-#         prompt = f"""
-#         Generate a 5-question {difficulty.lower()} level quiz based on the following content.
-#         Format as JSON with questions, options, and answers:
-#         {{
-#             "quiz": [
-#                 {{
-#                     "question": "",
-#                     "options": ["", "", "", ""],
-#                     "answer": ""
-#                 }}
-#             ]
-#         }}
-        
-#         Content:
-#         {text[:5000]}
-#         """
-        
-#         quiz_json = generate_with_gemini(prompt)
-#         if quiz_json:
-#             try:
-#                 quiz_data = json.loads(quiz_json)
-#                 st.session_state.quiz = quiz_data['quiz']
-#                 st.session_state.user_answers = [None] * len(quiz_data['quiz'])
-#             except json.JSONDecodeError:
-#                 st.error("Failed to parse quiz. Please try again.")
-
-# def document_query():
-#     """Document Q&A"""
-#     st.subheader("Document Query")
-    
-#     c = conn.cursor()
-#     c.execute("SELECT name, path FROM files")
-#     documents = c.fetchall()
-    
-#     if not documents:
-#         st.warning("No documents found!")
-#         return
-    
-#     selected_doc = st.selectbox("Select document", [doc[0] for doc in documents])
-#     question = st.text_input("Enter your question")
-    
-#     if question and st.button("Get Answer"):
-#         doc_path = [doc[1] for doc in documents if doc[0] == selected_doc][0]
-#         text, index, chunks = process_document(doc_path)
-        
-#         # Find relevant chunks
-#         query_embedding = embedding_model.encode([question])
-#         _, indices = index.search(np.array(query_embedding).astype('float32'), k=3)
-        
-#         context = " ".join([chunks[i] for i in indices[0]])
-        
-#         prompt = f"""
-#         Answer this question based on the provided context.
-#         Question: {question}
-#         Context: {context}
-#         If the answer isn't in the context, say you don't know.
-#         Provide a concise answer in 2-3 sentences.
-#         """
-        
-#         answer = generate_with_gemini(prompt)
-#         if answer:
-#             st.write("### Answer")
-#             st.write(answer)
-
-# def main():
-#     st.title("Study Assistant - Gemini Edition")
-    
-#     menu = ["Data Ingestion", "Summarizer", "Quiz Generator", "Document Query"]
-#     choice = st.sidebar.selectbox("Menu", menu)
-    
-#     if choice == "Data Ingestion":
-#         data_ingestion()
-#     elif choice == "Summarizer":
-#         summarizer()
-#     elif choice == "Quiz Generator":
-#         quiz_generator()
-#     elif choice == "Document Query":
-#         document_query()
-
-# if __name__ == "__main__":
-#     main()
-import streamlit as st
-import os
-import sqlite3
+# Import necessary libraries
+from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from sentence_transformers import SentenceTransformer
+from reportlab.lib.pagesizes import letter
 import google.generativeai as genai
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
 from PyPDF2 import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-import faiss
+import streamlit as st
 import numpy as np
-from sentence_transformers import SentenceTransformer
+import sqlite3
+import faiss
 import json
-import time  # Import the time module
+import time
+import os
 
-# Hardcoded Gemini API Key
-GEMINI_API_KEY = "AIzaSyCC430r2ShgtyH_V0Dqop9eW9DWdtVtH3Y"  # Replace with your actual API key
+# Set the Tavily API key
+os.environ["TAVILY_API_KEY"] = "Add Tavily API key"  # Replace with your Tavily API key
+
+# Initialize Tavily search tool to retrieve top 3 results
+web_search_tool = TavilySearchResults(k=3)
+
+# Set Gemini API key
+GEMINI_API_KEY = "Add Gemini API Key"  # Replace with your Gemini API Key
 
 # Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
@@ -294,25 +32,32 @@ generation_config = {
     "max_output_tokens": 8192,
 }
 
+# Initialize Gemini model
 model = genai.GenerativeModel(
     model_name="gemini-2.0-flash-exp",
     generation_config=generation_config,
 )
 
-# Initialize database
+# Initialize SQLite database for storing file metadata
 conn = sqlite3.connect('study_assistant.db')
 c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS files
              (id INTEGER PRIMARY KEY, name TEXT, path TEXT, size INTEGER)''')
-c.execute('''CREATE TABLE IF NOT EXISTS notes
-             (id INTEGER PRIMARY KEY, content TEXT, path TEXT)''')
 conn.commit()
 
-# Initialize Sentence Transformer
+# Initialize Sentence Transformer for text embeddings
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 def process_document(file_path):
-    """Extract text from PDF and create embeddings"""
+    """
+    Extract text from a PDF file, split it into chunks, and create embeddings.
+    Args:
+        file_path (str): Path to the document file.
+    Returns:
+        text (str): Extracted text from the document.
+        index (faiss.Index): FAISS index for embeddings.
+        chunks (list): List of text chunks.
+    """
     text = ""
     if file_path.endswith('.pdf'):
         reader = PdfReader(file_path)
@@ -337,7 +82,13 @@ def process_document(file_path):
     return text, index, chunks
 
 def generate_with_gemini(prompt):
-    """Generate text using Gemini"""
+    """
+    Generate text using the Gemini model.
+    Args:
+        prompt (str): Input prompt for the model.
+    Returns:
+        str: Generated text or None if an error occurs.
+    """
     try:
         response = model.generate_content(prompt)
         return response.text
@@ -345,83 +96,45 @@ def generate_with_gemini(prompt):
         st.error(f"Gemini error: {e}")
         return None
 
-def save_note_as_pdf(note_text, filename):
-    """Save note as PDF"""
-    try:
-        pdf_path = os.path.join("notes", filename)
-        os.makedirs("notes", exist_ok=True)
-        
-        c = canvas.Canvas(pdf_path, pagesize=letter)
-        width, height = letter
-        
-        text = c.beginText(40, height - 40)
-        text.setFont("Helvetica", 12)
-        for line in note_text.split('\n'):
-            text.textLine(line)
-        c.drawText(text)
-        c.save()
-        
-        # Save to database
-        c = conn.cursor()
-        c.execute("INSERT INTO notes (content, path) VALUES (?, ?)",
-                  (note_text, pdf_path))
-        conn.commit()
-        
-        return pdf_path
-    except Exception as e:
-        st.error(f"PDF creation error: {e}")
-        return None
-
 def data_ingestion():
-    """File upload and note taking functionality"""
+    """
+    Handle file upload functionality, process the document, and store metadata in the database.
+    """
     st.subheader("Upload Study Materials")
     
     # File upload
     uploaded_file = st.file_uploader("Choose a file", type=["pdf", "txt"])
     if uploaded_file:
-        upload_dir = "uploads"
-        os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, uploaded_file.name)
-        
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-            
-        # Process document
-        text, _, _ = process_document(file_path)
-        
-        # Store in database
+        # Check if a file with the same name already exists
         c = conn.cursor()
-        c.execute("INSERT INTO files (name, path, size) VALUES (?, ?, ?)",
-                  (uploaded_file.name, file_path, os.path.getsize(file_path)))
-        conn.commit()
-        st.success("File uploaded and processed successfully!")
-
-    # Manual notes
-    st.subheader("Create Manual Notes")
-    note_text = st.text_area("Enter your notes here:")
-    note_filename = st.text_input("Note filename:")
-    if st.button("Save Note"):
-        if note_text and note_filename:
-            pdf_path = save_note_as_pdf(note_text, f"{note_filename}.pdf")
-            if pdf_path:
-                st.success(f"Note saved as {pdf_path}")
-def generate_filename(note_text):
-    """Generate a filename using Gemini"""
-    prompt = f"Given the content of the note between <file> and </file> describe it in at max 4 words without any special characters. DO NOT give anything extra <file> '{note_text}' </file>"
-    
-    try:
-        response = generate_with_gemini(prompt)
-        if response:
-            # Clean up the filename (remove extra quotes or spaces)
-            filename = re.sub(r'["\s]+', '', response)  # Removes quotes and spaces
-            return filename
+        c.execute("SELECT name FROM files WHERE name = ?", (uploaded_file.name,))
+        existing_file = c.fetchone()
+        
+        if existing_file:
+            st.error(f"A file with the name '{uploaded_file.name}' already exists. Please upload a file with a different name.")
         else:
-            return "note.pdf"  # Default filename if Gemini fails
-    except Exception as e:
-        st.error(f"Error generating filename: {e}")
-        return "note.pdf"  # Default filename on error
+            upload_dir = "uploads"
+            os.makedirs(upload_dir, exist_ok=True)
+            file_path = os.path.join(upload_dir, uploaded_file.name)
+            
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+                
+            # Process document
+            text, _, _ = process_document(file_path)
+            
+            # Store in database
+            c.execute("INSERT INTO files (name, path, size) VALUES (?, ?, ?)",
+                      (uploaded_file.name, file_path, os.path.getsize(file_path)))
+            conn.commit()
+            st.success("File uploaded and processed successfully!")
+
 def get_uploaded_files():
-    """Fetch and return the list of files from the SQLite database."""
+    """
+    Fetch and return the list of files from the SQLite database.
+    Returns:
+        list: List of dictionaries containing file metadata.
+    """
     try:
         c = conn.cursor()
         c.execute("SELECT name, size FROM files")
@@ -440,8 +153,13 @@ def get_uploaded_files():
     except Exception as e:
         st.error(f"Error fetching document list: {e}")
         return []
+
 def delete_file(file_name):
-    """Delete a file from the SQLite database and local storage."""
+    """
+    Delete a file from the SQLite database and local storage.
+    Args:
+        file_name (str): Name of the file to delete.
+    """
     try:
         # Get the file path from the database
         c = conn.cursor()
@@ -461,8 +179,11 @@ def delete_file(file_name):
             st.error(f"File '{file_name}' not found.")
     except Exception as e:
         st.error(f"Error deleting file '{file_name}': {e}")
+
 def uploaded_files():
-    """Display the uploaded files with an option to delete them."""
+    """
+    Display the uploaded files with an option to delete them.
+    """
     file_data = get_uploaded_files()
 
     if not file_data:
@@ -471,16 +192,20 @@ def uploaded_files():
 
     st.subheader("Uploaded Files")
     
-    for file in file_data:
+    for i, file in enumerate(file_data):  # Use enumerate to get a unique index for each file
         col1, col2, col3 = st.columns([3, 1, 1])
         
         col1.text(f"📄 {file['File Name']}")
         col2.text(f"{file['Size (KB)']} KB")
         
-        if col3.button("Delete", key=file['File Name']):
+        # Use a unique key for the button by appending the index
+        if col3.button("Delete", key=f"delete_{i}_{file['File Name']}"):
             delete_file(file['File Name'])
+
 def summarizer():
-    """Document summarization"""
+    """
+    Generate a summary of a selected document using Gemini.
+    """
     st.subheader("Document Summarization")
     
     # Get list of documents
@@ -513,8 +238,10 @@ def summarizer():
             st.write(summary)
 
 def quiz_generator():
-    """Quiz generation"""
-    st.subheader("Quiz Generator")
+    """
+    Generate a quiz based on a selected document using Gemini.
+    """
+    st.subheader("Quiz Yourself")
     
     c = conn.cursor()
     c.execute("SELECT name, path FROM files")
@@ -605,9 +332,12 @@ def quiz_generator():
                     st.info(f"The correct answer is: {question['answer']}")
 
             st.write(f"### Final Score: {total_correct} out of {len(quiz)}")
+
 def take_notes():
-    """Generate notes from a selected document"""
-    st.subheader("Generate Notes from Documents")
+    """
+    Generate notes from a selected document using Gemini.
+    """
+    st.subheader("Unlock Key Insights from Your Documents")
     
     try:
         # Fetch the list of documents from the database
@@ -645,7 +375,9 @@ def take_notes():
             
             if notes:
                 st.subheader("Generated Notes")
-                st.text_area("Notes Preview", notes, height=300)
+                
+                # Display the notes with proper Markdown formatting
+                st.markdown(notes)  # Use st.markdown to render Markdown syntax
                 
                 # Allow users to download the notes as a text file
                 download_filename = f"{os.path.splitext(selected_doc)[0]}_notes.txt"
@@ -662,7 +394,9 @@ def take_notes():
         st.error(f"An error occurred: {e}")
 
 def init_chat_session():
-    """Initialize chat session state."""
+    """
+    Initialize chat session state.
+    """
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     if "selected_doc" not in st.session_state:
@@ -670,21 +404,30 @@ def init_chat_session():
     if "use_chat_history" not in st.session_state:
         st.session_state.use_chat_history = True
 
-def clear_chat_history():
-    """Clear the chat history."""
-    st.session_state.chat_history = []
-    st.rerun()
-
 def get_chat_history():
-    """Retrieve recent messages from the chat history."""
+    """
+    Retrieve recent messages from the chat history.
+    Returns:
+        str: Formatted chat history.
+    """
     chat_history = []
     for message in st.session_state.chat_history:
         chat_history.append(f"{message['role']}: {message['content']}")
     return "\n".join(chat_history)
 
+def clear_chat_history():
+    """
+    Clear the chat history and reset the selected document.
+    """
+    st.session_state.chat_history = []
+    st.session_state.selected_doc = None  # Reset the selected document
+    st.rerun()  # Rerun the app to refresh the UI
+
 def document_query():
-    """Document Q&A with chat history and document selection."""
-    st.subheader("Document Query")
+    """
+    Handle document Q&A with chat history, document selection, and web search fallback.
+    """
+    st.subheader("Ask Anything")
     
     # Initialize chat session
     init_chat_session()
@@ -698,7 +441,7 @@ def document_query():
         st.warning("No documents found!")
         return
     
-    # Document selection
+    # Document selection (only show if no document is selected)
     if st.session_state.selected_doc is None:
         st.session_state.selected_doc = st.selectbox("Select a file to chat with", [doc[0] for doc in documents])
         st.info(f"Selected document: {st.session_state.selected_doc}")
@@ -707,8 +450,8 @@ def document_query():
     with st.sidebar:
         st.subheader("Chat Settings")
         st.session_state.use_chat_history = st.checkbox("Enable Chat History", value=st.session_state.use_chat_history)
-        if st.button("Clear Chat History"):
-            clear_chat_history()
+        if st.button("New Chat"):
+            clear_chat_history()  # This will reset the selected document and clear the chat history
     
     # Display chat history
     st.subheader("Chat")
@@ -771,6 +514,26 @@ def document_query():
         # Get AI response using Gemini
         answer = generate_with_gemini(prompt)
         
+        # Check if the answer indicates that the context is insufficient
+        if "I don't know" in answer or "not in the context" in answer:
+            # Perform a web search using Tavily
+            web_search_results = web_search_tool.invoke({"query": user_input})
+            
+            # Generate a new prompt with the web search results
+            web_search_prompt = f"""
+            The user asked: {user_input}
+            
+            Here are some web search results:
+            {web_search_results}
+            
+            Summarize the most relevant information into a short, comprehensive answer.
+            Provide only the key points in 2-3 sentences.
+            """
+            
+            # Generate the final answer using Gemini
+            answer = generate_with_gemini(web_search_prompt)
+            answer = f"{answer}\n\n**Note:** This answer is based on web search results."  # Bold note
+        
         if answer:
             # Add AI response to chat history
             st.session_state.chat_history.append({"role": "assistant", "content": answer})
@@ -784,19 +547,29 @@ def document_query():
                     response_container.markdown(f"**Answer:** {full_response}▌")
                     time.sleep(0.1)  # Simulate streaming
                 response_container.markdown(f"**Answer:** {full_response}")
+
 def main():
-    st.title("Study Assistant - Gemini Edition")
-    
-    menu = ["Data Ingestion", "Summarizer", "Quiz Generator", "Document Query", "Notes", "Uploaded Files"]
-    choice = st.sidebar.selectbox("Menu", menu)
-    
-    if choice == "Data Ingestion":
+    """
+    Main function to run the Streamlit app.
+    """
+    # Set the title of the app
+    st.title("EduMate – Your Smartest Study Companion!🚀📚")
+
+    # Define the menu options
+    menu = ["Upload Study Materials", "Summarizer", "Create Quizzes", "Ask Questions", "Notes", "Uploaded Files"]
+
+    # Display the menu in the sidebar (always visible)
+    st.sidebar.title("Menu")
+    choice = st.sidebar.radio("Navigate", menu)
+
+    # Handle menu selection
+    if choice == "Upload Study Materials":
         data_ingestion()
     elif choice == "Summarizer":
         summarizer()
-    elif choice == "Quiz Generator":
+    elif choice == "Create Quizzes":
         quiz_generator()
-    elif choice == "Document Query":
+    elif choice == "Ask Questions":
         document_query()  # Includes chat history
     elif choice == "Notes":
         take_notes()
