@@ -11,6 +11,8 @@ EduMate is an AI-powered study assistant designed to help students manage, analy
 - **Ask Questions:** Interact with your documents through a chat interface. Ask questions, and EduMate will provide answers based on the content of your documents. If the answer isn't in the document, it will perform a web search to find relevant information.
 - **Notes:** Generate short, bullet-point notes from your documents to help you quickly review key concepts.
 - **Uploaded Files:** View and manage all your uploaded files. You can also delete files you no longer need.
+## Research Novelty
+EduMate leverages cutting-edge AI technologies, including Google Gemini for generative tasks, Sentence Transformers for semantic embeddings, and FAISS for efficient similarity search. This unique combination enables advanced document understanding, personalized quiz generation, and context-aware Q&A, setting it apart from traditional study tools. By integrating web search (via Tavily) as a fallback, EduMate ensures comprehensive answers even when document context is insufficient, showcasing a novel approach to AI-driven education.
 ## How to Use
 - Prerequisites
   - Python 3.8 or higher
