@@ -23,6 +23,7 @@ web_search_tool = TavilySearchResults(k=3)
 # Set Gemini API key
 GEMINI_API_KEY = "Add Gemini API Key"  # Replace with your Gemini API Key
 
+
 # Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 generation_config = {
@@ -32,32 +33,23 @@ generation_config = {
     "max_output_tokens": 8192,
 }
 
-# Initialize Gemini model
 model = genai.GenerativeModel(
     model_name="gemini-2.0-flash-exp",
     generation_config=generation_config,
 )
 
-# Initialize SQLite database for storing file metadata
+# Initialize database
 conn = sqlite3.connect('study_assistant.db')
 c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS files
              (id INTEGER PRIMARY KEY, name TEXT, path TEXT, size INTEGER)''')
 conn.commit()
 
-# Initialize Sentence Transformer for text embeddings
+# Initialize Sentence Transformer
 embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 def process_document(file_path):
-    """
-    Extract text from a PDF file, split it into chunks, and create embeddings.
-    Args:
-        file_path (str): Path to the document file.
-    Returns:
-        text (str): Extracted text from the document.
-        index (faiss.Index): FAISS index for embeddings.
-        chunks (list): List of text chunks.
-    """
+    """Extract text from PDF and create embeddings"""
     text = ""
     if file_path.endswith('.pdf'):
         reader = PdfReader(file_path)
@@ -82,13 +74,7 @@ def process_document(file_path):
     return text, index, chunks
 
 def generate_with_gemini(prompt):
-    """
-    Generate text using the Gemini model.
-    Args:
-        prompt (str): Input prompt for the model.
-    Returns:
-        str: Generated text or None if an error occurs.
-    """
+    """Generate text using Gemini"""
     try:
         response = model.generate_content(prompt)
         return response.text
@@ -97,9 +83,7 @@ def generate_with_gemini(prompt):
         return None
 
 def data_ingestion():
-    """
-    Handle file upload functionality, process the document, and store metadata in the database.
-    """
+    """File upload functionality"""
     st.subheader("Upload Study Materials")
     
     # File upload
@@ -130,11 +114,7 @@ def data_ingestion():
             st.success("File uploaded and processed successfully!")
 
 def get_uploaded_files():
-    """
-    Fetch and return the list of files from the SQLite database.
-    Returns:
-        list: List of dictionaries containing file metadata.
-    """
+    """Fetch and return the list of files from the SQLite database."""
     try:
         c = conn.cursor()
         c.execute("SELECT name, size FROM files")
@@ -155,11 +135,7 @@ def get_uploaded_files():
         return []
 
 def delete_file(file_name):
-    """
-    Delete a file from the SQLite database and local storage.
-    Args:
-        file_name (str): Name of the file to delete.
-    """
+    """Delete a file from the SQLite database and local storage."""
     try:
         # Get the file path from the database
         c = conn.cursor()
@@ -181,9 +157,7 @@ def delete_file(file_name):
         st.error(f"Error deleting file '{file_name}': {e}")
 
 def uploaded_files():
-    """
-    Display the uploaded files with an option to delete them.
-    """
+    """Display the uploaded files with an option to delete them."""
     file_data = get_uploaded_files()
 
     if not file_data:
@@ -203,9 +177,7 @@ def uploaded_files():
             delete_file(file['File Name'])
 
 def summarizer():
-    """
-    Generate a summary of a selected document using Gemini.
-    """
+    """Document summarization"""
     st.subheader("Document Summarization")
     
     # Get list of documents
@@ -238,9 +210,7 @@ def summarizer():
             st.write(summary)
 
 def quiz_generator():
-    """
-    Generate a quiz based on a selected document using Gemini.
-    """
+    """Quiz generation"""
     st.subheader("Quiz Yourself")
     
     c = conn.cursor()
@@ -334,9 +304,7 @@ def quiz_generator():
             st.write(f"### Final Score: {total_correct} out of {len(quiz)}")
 
 def take_notes():
-    """
-    Generate notes from a selected document using Gemini.
-    """
+    """Generate notes from a selected document"""
     st.subheader("Unlock Key Insights from Your Documents")
     
     try:
@@ -394,9 +362,7 @@ def take_notes():
         st.error(f"An error occurred: {e}")
 
 def init_chat_session():
-    """
-    Initialize chat session state.
-    """
+    """Initialize chat session state."""
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     if "selected_doc" not in st.session_state:
@@ -404,29 +370,25 @@ def init_chat_session():
     if "use_chat_history" not in st.session_state:
         st.session_state.use_chat_history = True
 
+
+
 def get_chat_history():
-    """
-    Retrieve recent messages from the chat history.
-    Returns:
-        str: Formatted chat history.
-    """
+    """Retrieve recent messages from the chat history."""
     chat_history = []
     for message in st.session_state.chat_history:
         chat_history.append(f"{message['role']}: {message['content']}")
     return "\n".join(chat_history)
 
+
+
 def clear_chat_history():
-    """
-    Clear the chat history and reset the selected document.
-    """
+    """Clear the chat history and reset the selected document."""
     st.session_state.chat_history = []
     st.session_state.selected_doc = None  # Reset the selected document
     st.rerun()  # Rerun the app to refresh the UI
 
 def document_query():
-    """
-    Handle document Q&A with chat history, document selection, and web search fallback.
-    """
+    """Document Q&A with chat history, document selection, and web search fallback."""
     st.subheader("Ask Anything")
     
     # Initialize chat session
@@ -549,9 +511,6 @@ def document_query():
                 response_container.markdown(f"**Answer:** {full_response}")
 
 def main():
-    """
-    Main function to run the Streamlit app.
-    """
     # Set the title of the app
     st.title("EduMate – Your Smartest Study Companion!🚀📚")
 
