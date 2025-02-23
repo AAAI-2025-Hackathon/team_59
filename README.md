@@ -35,6 +35,8 @@ EduMate leverages cutting-edge AI technologies, including Google Gemini for gene
 -  **Voice Interaction:** Add voice-based queries and responses for a more interactive experience.
 ## Try it out
 - https://eizxqr6xh4mjae6y2eovvf.streamlit.app/
+## demo video
+- https://youtu.be/8iWUtmYiwPk
 # Check-In
 
 - Title of your submission: **EduMate**
