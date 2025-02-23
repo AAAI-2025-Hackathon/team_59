@@ -17,10 +17,16 @@ EduMate is an AI-powered study assistant designed to help students manage, analy
   - Google Gemini API Key (replace the placeholder in the code with your actual API key)
   - Tavily API Key (replace the placeholder in the code with your actual API key)
 - Installation
-  - Clone the repository: git clone https://github.com/your-repo/edumate.git
-  - Install the required Python packages:pip install -r requirements.txt
+  - Clone the repository:
+    
+    `git clone https://github.com/your-repo/edumate.git`
+  - Install the required Python packages:
+
+     `pip install -r requirements.txt`
   - Replace the placeholders in the code with your actual API keys
-  - Run the Streamlit app:streamlit run app.py
+  - Run the Streamlit app:
+
+     `streamlit run app.py`
 ## What's Next for EduMate
 -  **Multilingual Support:** Expanding to cater to non-English speakers and global learners
 -  **Voice Interaction:** Add voice-based queries and responses for a more interactive experience.
