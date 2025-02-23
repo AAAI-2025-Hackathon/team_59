@@ -1,4 +1,4 @@
-### Hackathon Theme
+# Hackathon Theme
 # EduMate – Your Smartest Study Companion! 🚀📚
 
 ## Inspiration
